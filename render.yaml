@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: Music-App-Backend
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app"
+    plan: free
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"

@@ -1,0 +1,7 @@
+start.sh
+db.py
+credentials.env
+venv
+__pycache__/
+*.pyc
+*.pyo
