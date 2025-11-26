@@ -28,6 +28,7 @@ app.add_middleware(
         "http://192.168.1.11:5174",
         "http://localhost:5174",
         "http://127.0.0.1:8000",
+        "music-app-miguel.netlify.app",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
