@@ -34,6 +34,13 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+@app.on_event("startup")
+def startup_event():
+    global token
+    token = get_token()
+
+
+
 def is_token_expired(token):
     new = time.time()
     new -= start
@@ -72,8 +79,7 @@ def get_token():
 
     return value
 
-token=get_token()
-
+token = None
 @app.get("/backend/new-releases")
 def new_releases():
     global token
