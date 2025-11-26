@@ -116,10 +116,17 @@ def search_tracks(search):
     new_offset = 0
     for i in range(1):
         res = requests.get(
-            f"https://api.spotify.com/v1/search?q={search}&type=album&limit=50",
+            f"https://api.spotify.com/v1/search?q={search}&type=track&limit=50",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         new_offset += 50
         data = res.json()
-        merged_data.extend(data["albums"]["items"])
-    return merged_data
+        merged_data.extend(data["tracks"]["items"])
+
+    tracks = merged_data
+    albums = {}
+    for track in tracks:
+        album = track["album"]
+        album_id = album["id"]
+        albums[album_id] = album   # Guardamos por ID para evitar duplicados
+    return list(albums.values())
