@@ -8,10 +8,10 @@ import json
 
 from fastapi.middleware.cors import CORSMiddleware
 
-# To debug
 import time
 
-load_dotenv("credentials.env")
+if os.environ.get("RENDER") != "true":
+    load_dotenv("credentials.env")
 
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID");
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET");
@@ -63,9 +63,14 @@ def get_token():
 
     res = requests.post(TOKEN_URL, headers=headers, data=data)
 
+    value = res.json()
+    if "access_token" not in value:
+        print("ERROR AL OBTENER TOKEN:", value)
+        raise RuntimeError("No se pudo obtener el access_token")
+
     start=time.time()
 
-    return res.json()
+    return value
 
 token=get_token()
 
