@@ -24,10 +24,6 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://192.168.1.16:5174",
-        "http://192.168.1.11:5174",
-        "http://localhost:5174",
-        "http://127.0.0.1:8000",
         "https://music-app-miguel.netlify.app/",
     ],
     allow_credentials=True,
