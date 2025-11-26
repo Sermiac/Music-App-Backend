@@ -15,7 +15,10 @@ load_dotenv("credentials.env")
 
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID");
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET");
+URL= os.getenv("URL")
 TOKEN_URL = "https://accounts.spotify.com/api/token"
+
+
 
 app = FastAPI()
 
@@ -24,7 +27,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://music-app-miguel.netlify.app/",
+        URL,
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],

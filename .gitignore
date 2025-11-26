@@ -1,6 +1,7 @@
 start.sh
 db.py
 credentials.env
+credentials.env.production
 venv
 __pycache__/
 *.pyc
