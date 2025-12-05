@@ -43,7 +43,7 @@ def startup_event():
 
 def is_token_expired(token):
     new = time.time()
-    new -= start
+    new -= global_start
 
     if new >= 3600:
         access_token = token["access_token"]
@@ -53,11 +53,12 @@ def is_token_expired(token):
         )
         print(res.status_code)
         return res.status_code == 401
+
     else: return False
 
-start: float
+global_start: float
 def get_token():
-    global start
+    global global_start
     auth_string = f"{CLIENT_ID}:{CLIENT_SECRET}"
     b64_auth = base64.b64encode(auth_string.encode()).decode()
 
@@ -75,7 +76,7 @@ def get_token():
         print("ERROR AL OBTENER TOKEN:", value)
         raise RuntimeError("No se pudo obtener el access_token")
 
-    start=time.time()
+    global_start=time.time()
 
     return value
 
@@ -87,20 +88,21 @@ def new_releases():
         print ("RE-GENERAR TOKEN")
         token = get_token()
 
-    access_token = token["access_token"]
+    if token:
+        access_token = token["access_token"]
 
 
-    merged_data = []
-    new_offset = 0
-    for i in range(1):
-        res = requests.get(
-            f"https://api.spotify.com/v1/browse/new-releases?limit=50&offset={new_offset}",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        new_offset += 50
-        data = res.json()
-        merged_data.extend(data["albums"]["items"])
-    return merged_data
+        merged_data = []
+        new_offset = 0
+        for i in range(1):
+            res = requests.get(
+                f"https://api.spotify.com/v1/browse/new-releases?limit=50&offset={new_offset}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            new_offset += 50
+            data = res.json()
+            merged_data.extend(data["albums"]["items"])
+        return merged_data
 
 
 @app.get("/backend/search-tracks")
@@ -110,26 +112,27 @@ def search_tracks(search):
         print ("RE-GENERAR TOKEN")
         token = get_token()
 
-    access_token = token["access_token"]
+    if token:
+        access_token = token["access_token"]
 
-    merged_data = []
-    new_offset = 0
-    for i in range(1):
-        res = requests.get(
-            f"https://api.spotify.com/v1/search?q={search}&type=track&limit=50",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        new_offset += 50
-        data = res.json()
-        merged_data.extend(data["tracks"]["items"])
+        merged_data = []
+        new_offset = 0
+        for i in range(1):
+            res = requests.get(
+                f"https://api.spotify.com/v1/search?q={search}&type=track&limit=50",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            new_offset += 50
+            data = res.json()
+            merged_data.extend(data["tracks"]["items"])
 
-    tracks = merged_data
-    albums = {}
-    for track in tracks:
-        album = track["album"]
-        album_id = album["id"]
-        albums[album_id] = album   # Guardamos por ID para evitar duplicados
-    return list(albums.values())
+        tracks = merged_data
+        albums = {}
+        for track in tracks:
+            album = track["album"]
+            album_id = album["id"]
+            albums[album_id] = album
+        return list(albums.values())
 
 
 def generate_random_string(length=16):
@@ -139,7 +142,7 @@ def generate_random_string(length=16):
 @app.get("/backend/login")
 def login():
     state = generate_random_string()
-    scope = "user-read-private user-read-email"
+    scope = "user-read-private user-read-email user-top-read"
 
     params = {
         "response_type": "code",
@@ -153,14 +156,21 @@ def login():
     return RedirectResponse(url)
 
 user_token = None
+user_code = None
 @app.get("/backend/callback")
 def callback(code: str | None = None, state: str | None = None):
     global user_token
+    global user_code
+
+    if user_code:
+        code = user_code
 
     if code is None:
         return "Error: no se recibió el código de Spotify", 400
 
-    # Intercambiar el "code" por tokens
+    user_code = code
+
+    # Intercambiar el code por tokens
     token_url = "https://accounts.spotify.com/api/token"
 
     payload = {
@@ -187,9 +197,44 @@ def callback(code: str | None = None, state: str | None = None):
 
     return RedirectResponse(URL)
 
+user_start: float
+def get_user_token(code):
+    global user_start
+    # Intercambiar el code por tokens
+    token_url = "https://accounts.spotify.com/api/token"
+
+    payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+    }
+
+    response = requests.post(token_url, data=payload)
+    token_info = response.json()
+
+    # Token recibido
+    access_token = token_info.get("access_token")
+    refresh_token = token_info.get("refresh_token")
+
+    user_token = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": token_info.get("token_type"),
+        "expires_in": token_info.get("expires_in")
+    }
+    user_start=time.time()
+
+
 @app.get("/backend/basic-login")
-def basicLogin():
+def basic_login():
     global user_token
+    global user_start
+    if is_token_expired(user_token):
+        print ("RE-GENERAR TOKEN")
+        token = get_user_token(user_code)
+
     if user_token:
         access_token = user_token["access_token"]
 
@@ -199,7 +244,24 @@ def basicLogin():
          )
 
         data = res.json()
-        image = data["images"][1]["url"]
-        print(data)
+        return data
 
-        return image
+@app.get("/backend/user-top-tracks")
+def user_top_tracks():
+    global user_token
+    global user_start
+    if is_token_expired(user_token):
+        print ("RE-GENERAR TOKEN")
+        token = get_user_token(user_code)
+
+    if user_token:
+        access_token = user_token["access_token"]
+
+        res = requests.get(
+             f"https://api.spotify.com/v1/me/top/tracks?limit=50",
+              headers={"Authorization": f"Bearer {access_token}"},
+         )
+
+        data = res.json()
+        return data
+
