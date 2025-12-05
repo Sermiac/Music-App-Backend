@@ -110,4 +110,4 @@ This avoids hitting Spotify’s rate limits and prevents 401 errors.
 
 ## **License**
 
-This project is for personal and educational use.
+This project uses a GNU license.
