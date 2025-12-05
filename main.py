@@ -1,20 +1,20 @@
+from requests import auth
 from fastapi import FastAPI, Depends
-import requests
-import json
-import base64
-import os
+import requests, json, base64, os, secrets, time
 from dotenv import load_dotenv
-import json
+from fastapi.responses import RedirectResponse
+from urllib.parse import urlencode
+
 
 from fastapi.middleware.cors import CORSMiddleware
 
-import time
 
 if os.environ.get("RENDER") != "true":
     load_dotenv("credentials.env")
 
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID");
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET");
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 URL= os.getenv("URL")
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 
@@ -130,3 +130,76 @@ def search_tracks(search):
         album_id = album["id"]
         albums[album_id] = album   # Guardamos por ID para evitar duplicados
     return list(albums.values())
+
+
+def generate_random_string(length=16):
+    return secrets.token_urlsafe(length)[:length]
+
+
+@app.get("/backend/login")
+def login():
+    state = generate_random_string()
+    scope = "user-read-private user-read-email"
+
+    params = {
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "scope": scope,
+        "state": state,
+    }
+
+    url = "https://accounts.spotify.com/authorize?" + urlencode(params)
+    return RedirectResponse(url)
+
+user_token = None
+@app.get("/backend/callback")
+def callback(code: str | None = None, state: str | None = None):
+    global user_token
+
+    if code is None:
+        return "Error: no se recibió el código de Spotify", 400
+
+    # Intercambiar el "code" por tokens
+    token_url = "https://accounts.spotify.com/api/token"
+
+    payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+    }
+
+    response = requests.post(token_url, data=payload)
+    token_info = response.json()
+
+    # Token recibido
+    access_token = token_info.get("access_token")
+    refresh_token = token_info.get("refresh_token")
+
+    user_token = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": token_info.get("token_type"),
+        "expires_in": token_info.get("expires_in")
+    }
+
+    return RedirectResponse(URL)
+
+@app.get("/backend/basic-login")
+def basicLogin():
+    global user_token
+    if user_token:
+        access_token = user_token["access_token"]
+
+        res = requests.get(
+             f"https://api.spotify.com/v1/me",
+              headers={"Authorization": f"Bearer {access_token}"},
+         )
+
+        data = res.json()
+        image = data["images"][1]["url"]
+        print(data)
+
+        return image
