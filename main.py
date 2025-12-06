@@ -3,14 +3,17 @@ from fastapi import FastAPI, Depends
 import requests, json, base64, os, secrets, time
 from dotenv import load_dotenv
 from fastapi.responses import RedirectResponse
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 
 from fastapi.middleware.cors import CORSMiddleware
 
+PRODUCTION = None
 
 if os.environ.get("RENDER") != "true":
+    PRODUCTION = True
     load_dotenv("credentials.env")
+
 
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID");
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET");
@@ -139,6 +142,10 @@ def generate_random_string(length=16):
     return secrets.token_urlsafe(length)[:length]
 
 
+def generate_user_id(user_id: str) -> str:
+    token = secrets.token_urlsafe(32)
+    return token
+
 @app.get("/backend/login")
 def login():
     state = generate_random_string()
@@ -155,21 +162,16 @@ def login():
     url = "https://accounts.spotify.com/authorize?" + urlencode(params)
     return RedirectResponse(url)
 
-user_token = None
-user_code = None
+
+users = {}
 @app.get("/backend/callback")
 def callback(code: str | None = None, state: str | None = None):
-    global user_token
-    global user_code
+    global users
 
-    if user_code:
-        code = user_code
 
     if code is None:
         return "Error: no se recibió el código de Spotify", 400
 
-    user_code = code
-
     # Intercambiar el code por tokens
     token_url = "https://accounts.spotify.com/api/token"
 
@@ -188,20 +190,47 @@ def callback(code: str | None = None, state: str | None = None):
     access_token = token_info.get("access_token")
     refresh_token = token_info.get("refresh_token")
 
-    user_token = {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": token_info.get("token_type"),
-        "expires_in": token_info.get("expires_in")
-    }
+    res = requests.get(
+    "https://api.spotify.com/v1/me",
+    headers={"Authorization": f"Bearer {access_token}"}
+    )
 
-    return RedirectResponse(URL)
+    user_info = res.json()
+    user_id = generate_user_id(user_info["id"])
+    users[user_id] = {"code": code}
+
+    users[user_id].update({
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": token_info.get("token_type"),
+                "expires_in": token_info.get("expires_in")
+            })
+    redirect_url = f"{URL}?user_id={user_id}"
+    response = RedirectResponse(redirect_url)
+
+    parsed_url = urlparse(URL)
+    domain = parsed_url.hostname
+
+    response.set_cookie(
+    key="user_id",
+    value=user_id,
+    httponly=False,
+    secure=PRODUCTION,
+    samesite="None" if PRODUCTION else "Lax",
+    domain=domain if PRODUCTION else None,
+    path="/",
+    max_age=3600
+    )
+
+    return response
 
 user_start: float
-def get_user_token(code):
+def get_user_token(user_id):
     global user_start
+    global users
     # Intercambiar el code por tokens
     token_url = "https://accounts.spotify.com/api/token"
+    code = users[user_id]["user_code"]
 
     payload = {
         "grant_type": "authorization_code",
@@ -218,25 +247,26 @@ def get_user_token(code):
     access_token = token_info.get("access_token")
     refresh_token = token_info.get("refresh_token")
 
-    user_token = {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": token_info.get("token_type"),
-        "expires_in": token_info.get("expires_in")
-    }
+    users[user_id].update({
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": token_info.get("token_type"),
+            "expires_in": token_info.get("expires_in")
+        })
     user_start=time.time()
 
 
 @app.get("/backend/basic-login")
-def basic_login():
-    global user_token
+def basic_login(user_id):
+    global users
     global user_start
-    if is_token_expired(user_token):
+    print(user_id)
+    if is_token_expired(users[user_id]):
         print ("RE-GENERAR TOKEN")
-        token = get_user_token(user_code)
+        token = get_user_token(user_id)
 
-    if user_token:
-        access_token = user_token["access_token"]
+    if users[user_id]:
+        access_token = users[user_id]["access_token"]
 
         res = requests.get(
              f"https://api.spotify.com/v1/me",
@@ -247,15 +277,15 @@ def basic_login():
         return data
 
 @app.get("/backend/user-top-tracks")
-def user_top_tracks():
-    global user_token
+def user_top_tracks(user_id):
+    global users
     global user_start
-    if is_token_expired(user_token):
+    if is_token_expired(users[user_id]):
         print ("RE-GENERAR TOKEN")
-        token = get_user_token(user_code)
+        token = get_user_token(user_id)
 
-    if user_token:
-        access_token = user_token["access_token"]
+    if users[user_id]:
+        access_token = users[user_id]["access_token"]
 
         res = requests.get(
              f"https://api.spotify.com/v1/me/top/tracks?limit=50",
