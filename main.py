@@ -1,4 +1,4 @@
-from requests import auth
+from requests import auth, get
 from fastapi import FastAPI, Depends
 import requests, json, base64, os, secrets, time
 from dotenv import load_dotenv
@@ -196,6 +196,15 @@ def callback(code: str | None = None, state: str | None = None):
     )
 
     user_info = res.json()
+
+    if len(users) > 0:
+        target = next((k for k, obj in users.items() if obj.get("id") == user_info["id"]), None)
+        if target:
+            print("deleting expired user id = ", target)
+            del users[target]
+            print("regenerating user id...")
+
+
     user_id = generate_user_id(user_info["id"])
     users[user_id] = {"code": code}
 
@@ -203,7 +212,8 @@ def callback(code: str | None = None, state: str | None = None):
                 "access_token": access_token,
                 "refresh_token": refresh_token,
                 "token_type": token_info.get("token_type"),
-                "expires_in": token_info.get("expires_in")
+                "expires_in": token_info.get("expires_in"),
+                "id": user_info.get("id")
             })
     redirect_url = f"{URL}?user_id={user_id}"
     response = RedirectResponse(redirect_url)
@@ -221,7 +231,6 @@ def callback(code: str | None = None, state: str | None = None):
     path="/",
     max_age=3600
     )
-
     return response
 
 user_start: float
@@ -260,12 +269,13 @@ def get_user_token(user_id):
 def basic_login(user_id):
     global users
     global user_start
-    print(user_id)
-    if is_token_expired(users[user_id]):
-        print ("RE-GENERAR TOKEN")
-        token = get_user_token(user_id)
+    print("user id = ", user_id)
 
-    if users[user_id]:
+    if user_id in users:
+        if is_token_expired(users[user_id]):
+            print("RE-GENERAR TOKEN")
+            token = get_user_token(user_id)
+
         access_token = users[user_id]["access_token"]
 
         res = requests.get(
@@ -276,15 +286,23 @@ def basic_login(user_id):
         data = res.json()
         return data
 
+    else: print(f"no user found realted to = {user_id}")
+
 @app.get("/backend/user-top-tracks")
 def user_top_tracks(user_id):
     global users
     global user_start
+    print("user id = ", user_id)
+
     if is_token_expired(users[user_id]):
         print ("RE-GENERAR TOKEN")
         token = get_user_token(user_id)
 
-    if users[user_id]:
+    if user_id in users:
+        if is_token_expired(users[user_id]):
+            print("RE-GENERAR TOKEN")
+            token = get_user_token(user_id)
+
         access_token = users[user_id]["access_token"]
 
         res = requests.get(
@@ -294,4 +312,6 @@ def user_top_tracks(user_id):
 
         data = res.json()
         return data
+
+    else: print(f"no user found realted to = {user_id}")
 
