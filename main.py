@@ -197,6 +197,7 @@ def callback(code: str | None = None, state: str | None = None):
 
     user_info = res.json()
 
+    # Check if user already exists and delete it
     if len(users) > 0:
         target = next((k for k, obj in users.items() if obj.get("id") == user_info["id"]), None)
         if target:
@@ -224,7 +225,7 @@ def callback(code: str | None = None, state: str | None = None):
     response.set_cookie(
     key="user_id",
     value=user_id,
-    httponly=False,
+    httponly=True,
     secure=PRODUCTION,
     samesite="None" if PRODUCTION else "Lax",
     domain=domain if PRODUCTION else None,
