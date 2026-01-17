@@ -195,6 +195,11 @@ def callback(code: str | None = None, state: str | None = None):
     headers={"Authorization": f"Bearer {access_token}"}
     )
 
+    if res.status_code != 200:
+        print("[SPOTIFY TOKEN ERROR]", res.status_code)
+        redirect_url = f"{URL}?error=spotify"
+        return RedirectResponse(redirect_url)
+
     user_info = res.json()
 
     # Check if user already exists and delete it
@@ -315,4 +320,3 @@ def user_top_tracks(user_id):
         return data
 
     else: print(f"no user found realted to = {user_id}")
-
