@@ -197,6 +197,7 @@ def callback(code: str | None = None, state: str | None = None):
 
     if res.status_code != 200:
         print("[SPOTIFY TOKEN ERROR]", res.status_code)
+        print("[SPOTIFY TOKEN ERROR]", res.text)
         redirect_url = f"{URL}?error=spotify"
         return RedirectResponse(redirect_url)
 
